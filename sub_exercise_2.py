@@ -55,13 +55,22 @@ def client():
                   'upload\tupload a file to server file base\n'
                   'download\tdownload a file from server file base'
                   'list\tlist all files available on server')
-            cmd = str(sys.stdin.readline()).strip('\n')
+            cmd = sys.stdin.readline().strip('\n')
+
             if cmd == 'exit':
                 break
+            elif cmd == 'upload':
+                print('please specify file path:')
+                filepath = sys.stdin.readline().strip('\n')
+                with open(filepath, 'rb') as f:
+                    s.sendfile(f)
+            elif cmd == 'download':
+                pass
+            elif cmd == 'list':
+                pass
 
             # Set the whole string
             s.sendall(bytes(cmd, encoding='utf-8'))
-            s.send()
             # print('Message send successfully')
 
             # Now receive data
