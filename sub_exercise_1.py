@@ -56,11 +56,12 @@ def client():
 
             # Set the whole string
             s.sendall(bytes(cmd, encoding='utf-8'))
+            s.send()
             # print('Message send successfully')
 
             # Now receive data
             reply = s.recv(4096)
-
+            s.sendfile()
             print('骰子点数： ' + str(reply, encoding='utf-8').strip())
             print('')
         except socket.error:
@@ -118,7 +119,7 @@ def server():
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
-        print('method not specified(server or client)')
+        print('role not specified(server or client)')
         exit()
     if sys.argv[1] == 'server':
         server()
