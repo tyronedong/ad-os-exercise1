@@ -1,5 +1,8 @@
 import socket
 import sys
+import os
+
+End=bytes('EOF', encoding='utf-8')
 
 def server():
     HOST = ''  # Symbolic name meaning all available interfaces
@@ -14,25 +17,57 @@ def server():
     conn, addr = s.accept()
     print('Connected with ' + addr[0] + ':' + str(addr[1]))
 
+    FBASE='filebase_server'
+
     # now keep talking with the client
     while True:
-        # wait to accept a connection - blocking call
-        data = conn.recv(4096)
+        # wait to accept command
+        cmd = conn.recv(4096)
 
-        if not data:
+        if not cmd:
             print('Disconnected with ' + addr[0] + ':' + str(addr[1]))
             break
 
-        cmd_recv = str(data, encoding='utf-8').strip()
+        cmd_recv = str(cmd, encoding='utf-8').strip()
 
-        if cmd_recv == 'go':
-            # reply = str(rd.randint(1, 6))
-            pass
+        if cmd_recv == 'upload':
+            filename_b = read_till_End(conn)
+            conn.sendall(End)
+
+            data_b = read_till_End(conn)
+
+            try:
+                with open('%s/%s'%(FBASE, str(filename_b, encoding='utf-8')), 'wb') as f:
+                    f.write(data_b)
+                message = 'upload success'
+            except Exception as err:
+                message = 'upload failed'
+
+            print(message)
+            conn.sendall(bytes(message, encoding='utf-8'))
+
+        elif cmd_recv == 'download':
+            filename_b = read_till_End(conn)
+            filename = '%s/%s' % (FBASE, str(filename_b, encoding='utf-8'))
+            if os.path.exists(filename):
+                with open(filename, 'rb') as f:
+                    conn.sendfile(f)
+                    conn.sendall(End)
+                print('download success')
+            else:
+                conn.sendall(End)
+                print('download failed')
+
+        elif cmd_recv == 'list':
+            files = os.listdir(FBASE)
+            file_info = '\n'.join(files)
+            conn.sendall(bytes(file_info, encoding='utf-8'))
+            conn.sendall(End)
+            print(file_info)
         else:
             reply = 'command not defined: ' + cmd_recv
-
-        conn.sendall(bytes(reply, encoding='utf-8'))
-        print('replt to client: ' + reply)
+            conn.sendall(bytes(reply, encoding='utf-8'))
+            print(reply)
 
     conn.close()
     s.close()
@@ -51,39 +86,79 @@ def client():
 
     while True:
         try:
-            print('请选择要进行的操作：\n'
-                  'upload\tupload a file to server file base\n'
-                  'download\tdownload a file from server file base'
-                  'list\tlist all files available on server')
+            print('\n请选择要进行的操作：\n'
+                  'upload     upload a file to server file base\n'
+                  'download   download a file from server file base\n'
+                  'list       list all files available on server\n')
             cmd = sys.stdin.readline().strip('\n')
+
+            s.sendall(bytes(cmd, encoding='utf-8'))
 
             if cmd == 'exit':
                 break
             elif cmd == 'upload':
                 print('please specify file path:')
                 filepath = sys.stdin.readline().strip('\n')
+                if not os.path.exists(filepath):
+                    print('file "%s" not exists' % filepath)
+                    continue
+
+                send_append_End(s, bytes(os.path.basename(filepath), encoding='utf-8'))
+                s.recv(1024)    # 用于阻塞进程
                 with open(filepath, 'rb') as f:
                     s.sendfile(f)
+                    s.sendall(End)
+                res = s.recv(4096)
+                print(str(res, encoding='utf-8'))
             elif cmd == 'download':
-                pass
+                print('please specify file name:')
+                filename = sys.stdin.readline().strip('\n')
+                send_append_End(s, bytes(filename, encoding='utf-8'))
+                data_b = read_till_End(s)
+                if len(data_b) == 0:
+                    print('file "%s" not exists' % filename)
+                else:
+                    with open('filebase_client/%s' % filename, 'wb') as f:
+                        f.write(data_b)
+                    print('download success')
+
             elif cmd == 'list':
-                pass
+                data_b = read_till_End(s)
+                file_info = str(data_b, encoding='utf-8')
+                print(file_info)
 
-            # Set the whole string
-            s.sendall(bytes(cmd, encoding='utf-8'))
-            # print('Message send successfully')
+            else:
+                da = s.recv(4096)
+                print(str(da, encoding='utf-8'))
 
-            # Now receive data
-            reply = s.recv(4096)
-            s.sendfile()
-            print('骰子点数： ' + str(reply, encoding='utf-8').strip())
-            print('')
         except socket.error:
             # Send failed
             print('Send failed')
             sys.exit()
 
     s.close()
+
+def send_append_End(s, data_b):
+    s.sendall(data_b)
+    s.sendall(End)
+
+def read_till_End(s):
+    total_data = []
+    while True:
+        data = s.recv(8192)
+        if End in data:
+            total_data.append(data[:data.find(End)])
+            break
+        total_data.append(data)
+        if len(total_data) > 1:
+            # check if end_of_data was split
+            last_pair = total_data[-2] + total_data[-1]
+            if End in last_pair:
+                total_data[-2] = last_pair[:last_pair.find(End)]
+                total_data.pop()
+                break
+
+    return b''.join(total_data)
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:

@@ -56,12 +56,10 @@ def client():
 
             # Set the whole string
             s.sendall(bytes(cmd, encoding='utf-8'))
-            s.send()
             # print('Message send successfully')
 
             # Now receive data
             reply = s.recv(4096)
-            s.sendfile()
             print('骰子点数： ' + str(reply, encoding='utf-8').strip())
             print('')
         except socket.error:
