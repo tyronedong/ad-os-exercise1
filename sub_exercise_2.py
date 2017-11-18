@@ -2,7 +2,7 @@ import socket
 import sys
 import os
 
-End=bytes('EOF', encoding='utf-8')
+End=bytes('^EOF^', encoding='utf-8')
 
 def server():
     HOST = ''  # Symbolic name meaning all available interfaces
