@@ -1,7 +1,8 @@
 import socket
 import sys
+import math
 import random as rd
-
+import re
 # host = 'www.google.com'
 # port = 80
 #
@@ -29,18 +30,21 @@ def stand_alone():
         print('计算结果： ' + str(res))
         print('')
 
-OPTR_PRI = [[1, 1, -1, -1, -1, 1, 1],
-            [1, 1, -1, -1, -1, 1, 1],
-            [1, 1, 1, 1, -1, 1, 1],
-            [1, 1, 1, 1, -1, 1, 1],
-            [-1, -1, -1, -1, -1, 0, 2],
-            [-1, -1, -1, -1, 2, 1, 1],
-            [-1, -1, -1, -1, -1, 2, 0]]
-OPTR_DIC = {'+': 0, '-': 1, '*': 2, '/': 3, '(': 4, ')': 5, '#': 6}
+OPTR_PRI = [[1, 1, -1, -1, -1, 1, -1, 1],
+            [1, 1, -1, -1, -1, 1, -1, 1],
+            [1, 1, 1, 1, -1, 1, -1, 1],
+            [1, 1, 1, 1, -1, 1, -1, 1],
+            [-1, -1, -1, -1, -1, 0, -1, 2],
+            [-1, -1, -1, -1, 2, 1, -1, 1],
+            [1, 1, 1, 1, -1, 1, 2, 1],
+            [-1, -1, -1, -1, -1, 2, -1, 0]]
+OPTR_DIC = {'+': 0, '-': 1, '*': 2, '/': 3, '(': 4, ')': 5, '^':6, '#': 7}
 OPTR_LIST = OPTR_DIC.keys()
 NUM_LIST = ['0','1','2','3','4','5','6','7','8','9','.']
 
 def cal_expression(expression):
+    if not expression.endswith('#'):
+        expression += '#'
     num_stack = []
     optr_stack = []
     optr_stack.append('#')
@@ -112,6 +116,8 @@ def operate(num_1, opt, num_2):
         return num_1*num_2
     elif opt == '/':
         return num_1/num_2
+    elif opt == '^':
+        return math.pow(num_1, num_2)
     else:
         return None
 
@@ -135,23 +141,40 @@ def client():
 
     while True:
         try:
-            print('请输入算术表达式：')
-            cmd = str(sys.stdin.readline()).strip('\n')
-            if cmd == 'exit':
-                break
-            # Set the whole string
-            s.sendall(bytes(cmd, encoding='utf-8'))
-            reply = s.recv(4096)
-            print('计算结果： ' + str(reply, encoding='utf-8'))
-            print('')
+            print('请输入您的姓名：')
+            name = str(sys.stdin.readline()).strip('\n')
+            s.sendall(bytes(name, encoding='utf-8'))    # 发送名字
+
+            print('请输入本次要做的题数：')
+            while True:
+                num = str(sys.stdin.readline()).strip('\n')
+                if (not num.isdigit()) or int(num)<=0:
+                    print('请输入正整数：')
+                    continue
+                else:
+                    break
+            # 把题数发给服务器
+            s.sendall(bytes(num, encoding='utf-8'))     # 发送题数
+
+            for i in range(int(num)):
+                question = str(s.recv(1024),encoding='utf-8')     # 接受问题
+                print('%s: %s'%(i+1,question))
+                answer = str(sys.stdin.readline()).strip('\n')
+                s.sendall(bytes(answer, encoding='utf-8'))        # 发送答案
+
+            result = str(s.recv(1024), encoding='utf-8')    # 接受结果
+            print(result)
+
         except socket.error:
             # Send failed
             print('Send failed')
             sys.exit()
 
-    s.close()
+is_float = re.compile('^\d+(\.\d*)?$')
 
 def server():
+    exam_result = {}
+
     HOST = ''  # Symbolic name meaning all available interfaces
     PORT = 8888  # Arbitrary non-privileged port
 
@@ -172,29 +195,95 @@ def server():
     s.listen(10)
     print('Socket now listening on port: ' + str(PORT))
 
+    # wait to accept a connection - blocking call
     conn, addr = s.accept()
     print('Connected with ' + addr[0] + ':' + str(addr[1]))
 
-    # now keep talking with the client
     while True:
-        # wait to accept a connection - blocking call
-        data = conn.recv(4096)
 
-        if not data:
-            print('Disconnected with ' + addr[0] + ':' + str(addr[1]))
-            break
+        name_b = conn.recv(1024)    # 接受名字
+        name = str(name_b, encoding='utf-8')
+        num_b = conn.recv(1024)     # 接受题数
+        num = int(str(num_b,encoding='utf-8'))
 
-        cmd_recv = str(data, encoding='utf-8').strip()
-        if not cmd_recv.endswith('#'):
-            cmd_recv += '#'
-        reply = str(cal_expression(cmd_recv))
+        if exam_result.get(name):   # 记录考生信息
+            exam_result[name].append([num, 0])
+        else:
+            exam_result[name] = [[num, 0]]
 
-        conn.sendall(bytes(reply, encoding='utf-8'))
-        print('replt to client: ' + reply)
+        for i in range(num):
+            question = gen_question()
+            conn.sendall(bytes(question, encoding='utf-8'))     # 发送问题
+            answer = str(conn.recv(1024), encoding='utf-8')     # 接受答案
+            if not is_float.match(answer):
+                continue
+            if abs(cal_expression(question) - float(answer)) < 0.001:
+                cur_exam = exam_result[name].pop()
+                cur_exam[1] += 1
+                exam_result[name].append(cur_exam)
 
-    conn.close()
-    s.close()
+        cur_exam = exam_result[name].pop()
+        result = 'correct: %s/%s\nfinal score: %s' % (cur_exam[1], cur_exam[0], cur_exam[1]/cur_exam[0])
+        conn.sendall(bytes(result, encoding='utf-8'))   # 发送结果
+        print('replt to client: ' + result)
 
+
+def gen_question_bank(number):
+    for i in range(number):
+        pass
+
+def gen_question_raw():
+    num_count = rd.randint(3, 5)    # 生成num_count个值参与计算
+
+    opr_candi = ['+','+','+','-','-','-','*','/','^']
+    opr_add_minus = ['+','-']
+    opr_higher = ['*','/','^']
+    exp_list = []
+    flag = True
+    for i in range(num_count):
+
+        # 生成左括号
+        if flag and rd.random() < 0.25 and i < num_count-1:
+            exp_list.append('(')
+            flag = False
+
+        # 生成数字，控制幂较小
+        if len(exp_list) > 1 and exp_list[len(exp_list)-1] == '^':
+            exp_list.append(str(rd.randint(2, 6)))
+        elif len(exp_list) > 2 and (exp_list[len(exp_list)-1]=='(' and exp_list[len(exp_list)-2]=='^'):
+            exp_list.append(str(rd.randint(1, 5)))
+        elif len(exp_list) > 4 and (exp_list[len(exp_list)-3]=='(' and exp_list[len(exp_list)-4]=='^'):
+            exp_list.append(str(rd.randint(1, 5)))
+
+        else:
+            exp_list.append(str(rd.randint(1,100)))
+
+        # 生成右括号
+        if len(exp_list) > 3 and exp_list[len(exp_list)-4] == '(':
+            exp_list.append(')')
+            flag = True
+
+        # 生成运算符
+        if not flag:    # 左括号生成，则括号里只有加减法
+            exp_list.append(opr_add_minus[rd.randrange(0, len(opr_add_minus))])
+        elif exp_list[len(exp_list)-1]==')':    # 上一个是右括号，则后面跟一个乘除幂运算
+            exp_list.append(opr_higher[rd.randrange(0, len(opr_higher))])
+        else:   # 都不是，则全局随机生成
+            exp_list.append(opr_candi[rd.randrange(0, len(opr_candi))])
+    exp_list.pop()  # 去掉最后一个多余的运算符
+
+    expression = ''.join(exp_list)
+
+    if cal_expression(expression):
+        return expression
+    else:
+        return None
+
+def gen_question():
+    while True:
+        expression = gen_question_raw()
+        if expression:
+            return expression
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
@@ -209,4 +298,6 @@ if __name__ == '__main__':
     # client()
     # server()
     # stand_alone()
+    # for i in range(45):
+    #     print(gen_question())
     print('finish')
