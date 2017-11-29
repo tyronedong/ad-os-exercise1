@@ -1,6 +1,7 @@
 import socket
 import sys
 import os
+import difflib
 
 End=bytes('^EOF^', encoding='utf-8')
 
@@ -89,6 +90,7 @@ def client():
             print('\n请选择要进行的操作：\n'
                   'upload     upload a file to server file base\n'
                   'download   download a file from server file base\n'
+                  'delete     delete a file from server file base\n'
                   'list       list all files available on server\n')
             cmd = sys.stdin.readline().strip('\n')
 
@@ -161,13 +163,13 @@ def read_till_End(s):
     return b''.join(total_data)
 
 if __name__ == '__main__':
-    if len(sys.argv) == 1:
-        print('role not specified(server or client)')
-        exit()
-    if sys.argv[1] == 'server':
-        server()
-    elif sys.argv[1] == 'client':
-        client()
+    # if len(sys.argv) == 1:
+    #     print('role not specified(server or client)')
+    #     exit()
+    # if sys.argv[1] == 'server':
+    #     server()
+    # elif sys.argv[1] == 'client':
+    #     client()
     # client()
     # server()
     print('finish')

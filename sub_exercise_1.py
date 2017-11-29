@@ -170,7 +170,7 @@ def client():
             print('Send failed')
             sys.exit()
 
-is_float = re.compile('^\d+(\.\d*)?$')
+is_float = re.compile('^-?\d+(\.\d*)?$')
 
 def server():
     exam_result = {}
@@ -200,6 +200,7 @@ def server():
     print('Connected with ' + addr[0] + ':' + str(addr[1]))
 
     while True:
+        print(exam_result)
 
         name_b = conn.recv(1024)    # 接受名字
         name = str(name_b, encoding='utf-8')
@@ -213,16 +214,22 @@ def server():
 
         for i in range(num):
             question = gen_question()
+            print('question %s: %s'%(i+1, question))
             conn.sendall(bytes(question, encoding='utf-8'))     # 发送问题
             answer = str(conn.recv(1024), encoding='utf-8')     # 接受答案
             if not is_float.match(answer):
+                print('illegal result from client: '+answer)
                 continue
             if abs(cal_expression(question) - float(answer)) < 0.001:
                 cur_exam = exam_result[name].pop()
                 cur_exam[1] += 1
                 exam_result[name].append(cur_exam)
+                print('right answer from client: '+answer)
+            else:
+                print('wrong answer from client: '+answer)
 
         cur_exam = exam_result[name].pop()
+        exam_result[name].append(cur_exam)
         result = 'correct: %s/%s\nfinal score: %s' % (cur_exam[1], cur_exam[0], cur_exam[1]/cur_exam[0])
         conn.sendall(bytes(result, encoding='utf-8'))   # 发送结果
         print('replt to client: ' + result)
